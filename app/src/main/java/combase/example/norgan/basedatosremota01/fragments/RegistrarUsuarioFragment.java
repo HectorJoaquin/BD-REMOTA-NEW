@@ -17,6 +17,7 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
+import android.util.Base64;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -26,16 +27,22 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import combase.example.norgan.basedatosremota01.R;
 
@@ -43,6 +50,7 @@ import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.support.v4.content.ContextCompat.checkSelfPermission;
+import static android.support.v4.content.ContextCompat.getCodeCacheDir;
 
 
 /**
@@ -53,7 +61,8 @@ import static android.support.v4.content.ContextCompat.checkSelfPermission;
  * Use the {@link RegistrarUsuarioFragment#newInstance} factory method to
  * create an instance of this fragment.
  */
-public class RegistrarUsuarioFragment extends Fragment implements Response.Listener<JSONObject>,Response.ErrorListener{
+public class RegistrarUsuarioFragment extends Fragment {
+    //implements Response.Listener<JSONObject>,Response.ErrorListener
     // TODO: Rename parameter arguments, choose names that match
     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
     private static final String ARG_PARAM1 = "param1";
@@ -82,9 +91,13 @@ public class RegistrarUsuarioFragment extends Fragment implements Response.Liste
     ImageView imgFoto;
     Button btnFoto;
 
-    //permite la conexion con nuestro web service
+    //permite la conexion con nuestro web service METODO GET
     RequestQueue requestQueue;
     JsonObjectRequest jsonObjectRequest;
+
+    //METODO POST
+    StringRequest stringRequest;
+
 
     public RegistrarUsuarioFragment() {
         // Required empty public constructor
@@ -237,6 +250,14 @@ public class RegistrarUsuarioFragment extends Fragment implements Response.Liste
                 Uri miPath = data.getData();
                 imgFoto.setImageURI(miPath);
 
+                try {
+                    bitmap=MediaStore.Images.Media.getBitmap(getContext().getContentResolver(),miPath);
+                    imgFoto.setImageBitmap(bitmap);
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
                 break;
 
 
@@ -249,7 +270,7 @@ public class RegistrarUsuarioFragment extends Fragment implements Response.Liste
                             }
                         });
 
-                Bitmap bitmap= BitmapFactory.decodeFile(path);
+                bitmap= BitmapFactory.decodeFile(path);
                 imgFoto.setImageBitmap(bitmap);
 
                 break;
@@ -260,15 +281,73 @@ public class RegistrarUsuarioFragment extends Fragment implements Response.Liste
 
     private void cargarweb() {
 
-        String url = "http://192.168.1.41/BDRemota/wsJSONRegistro.php?documento="+etDocumento.getText().toString()+"&nombre="+etNombre.getText().toString()+"&profesion="+etProfesion.getText().toString();
+        //String url = "http://192.168.1.41/BDRemota/wsJSONRegistro.php?documento="+etDocumento.getText().toString()+"&nombre="+etNombre.getText().toString()+"&profesion="+etProfesion.getText().toString();
+        //url = url.replace(" ","%20");
+        //jsonObjectRequest =  new JsonObjectRequest(Request.Method.GET,url,null,this,this);
+        //requestQueue.add(jsonObjectRequest);
 
-        url = url.replace(" ","%20");
+        String url = "http://192.168.1.41/BDRemota/wsJSONRegistroMovil.php?";
+        stringRequest = new StringRequest(Request.Method.POST, url, new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
 
-        jsonObjectRequest =  new JsonObjectRequest(Request.Method.GET,url,null,this,this);
+                if (response.trim().equalsIgnoreCase("registra")){
 
-        requestQueue.add(jsonObjectRequest);
+                    etDocumento.setText("");
+                    etNombre.setText("");
+                    etProfesion.setText("");
+
+                    Toast.makeText(getContext(), "Seleccion exitoso", Toast.LENGTH_SHORT).show();
+                }else{
+
+                    Toast.makeText(getContext(), "Nose a registratdo ", Toast.LENGTH_SHORT).show();
+
+                }
+
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+
+                Toast.makeText(getContext(), "NO SE PUDO CONECTAR AL WEB SERVICE", Toast.LENGTH_SHORT).show();
+            }
+        }){
+
+            @Override
+            protected Map<String, String> getParams() throws AuthFailureError {
 
 
+                String documento = etDocumento.getText().toString();
+                String nombre = etNombre.getText().toString();
+                String profesion = etProfesion.getText().toString();
+
+
+                String imagen = convertirImgString(bitmap);
+
+
+                Map<String,String> parametros = new HashMap<>();
+                parametros.put("documento",documento);
+                parametros.put("nombre",nombre);
+                parametros.put("profesion",profesion);
+                parametros.put("imagen",imagen);
+
+
+                return parametros;
+            }
+        };
+
+requestQueue.add(stringRequest);
+
+    }
+
+    private String convertirImgString(Bitmap bitmap) {
+
+        ByteArrayOutputStream array =new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG,100,array);
+        byte[] imagenByte=array.toByteArray();
+        String imagenString = Base64.encodeToString(imagenByte,Base64.DEFAULT);
+
+        return imagenString;
     }
 
     // TODO: Rename method, update argument and hook method into UI event
@@ -295,29 +374,29 @@ public class RegistrarUsuarioFragment extends Fragment implements Response.Liste
         mListener = null;
     }
 
-    @Override
-    public void onErrorResponse(VolleyError error) {
+    //@Override
+    //public void onErrorResponse(VolleyError error) {
 
 
-        Toast.makeText(getContext(), "No se pudo registrar"+error.toString(), Toast.LENGTH_SHORT).show();
-        Log.i("ERROR",error.toString());
+    //  Toast.makeText(getContext(), "No se pudo registrar"+error.toString(), Toast.LENGTH_SHORT).show();
+    //  Log.i("ERROR",error.toString());
 
-    }
+    // }
 
-    @Override
-    public void onResponse(JSONObject response) {
-
-
-        Toast.makeText(getContext(), "Correctamente Ingresado", Toast.LENGTH_SHORT).show();
+    //@Override
+    //public void onResponse(JSONObject response) {
 
 
-
-        etDocumento.setText("");
-        etNombre.setText("");
-        etProfesion.setText("");
+    //  Toast.makeText(getContext(), "Correctamente Ingresado", Toast.LENGTH_SHORT).show();
 
 
-    }
+
+    ////  etDocumento.setText("");
+    //etNombre.setText("");
+    //  etProfesion.setText("");
+
+
+    //}
 
     /**
      * This interface must be implemented by activities that contain this
